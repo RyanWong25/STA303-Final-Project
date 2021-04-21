@@ -10,29 +10,19 @@ output:
     toc: true
     toc_depth: 2
 titlepage: true
-titlepage-color: "6C3082"
+titlepage-color: "096192"
 titlepage-text-color: "FFFFFF"
 titlepage-rule-color: "FFFFFF"
 titlepage-rule-height: 2
 ---
 
-```{r, message = FALSE, echo=FALSE}
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
 library(tidyverse)
-# this should supress all code and messages
-knitr::opts_chunk$set(include=FALSE)
+library(kableExtra)
+library(lme4)
+# this should supress all code and messages (when set to false)
+knitr::opts_chunk$set(include=TRUE)
 ```
-
-# General comments (you can delete this section)
-
-_You can delete this section, and if you want to check what it said, just open a template from the package again. You don't have to use this particular template, but you DO need to write you report in RMarkdown and include a cover page._
-
-_The cover page must have:_
-
-*	_A title and subtitle_
-* _"Report prepared for Black Saber Software by" your company name_
-*	_Date (assessment submission date is fine)_
-
-_You can change the colour of this cover to any colour you would like by replacing 6C3082 in the YAML above (line 11) to another hex code. You could use this tool to help you:_ https://htmlcolorcodes.com/color-picker/
 
 \newpage
 # Executive summary
@@ -48,21 +38,22 @@ _Guidelines for the executive summary:_
 
 \newpage
 # Technical report
-_This part of the report is much more comprehensive than the executive summary. The audience is statistics/data-minded people, but you should NOT include code or unformatted R output here._
-
 
 ## Introduction
 
-_Provide a brief introduction to your report and outline what the report will cover. This section is valuable for setting scope and expectations. _
+Employees at Black Saber have been raising concerns about potential bias in the company's hiring and remuneration processes. This report will cover the topic of gender parity in wages, promotions, and hiring at Black Saber. We will be working with the hiring data for Black Saber's new-grad program and the data about promotions and salary for Black Saber's current employees, which span from 2013 to 2020. We will cover all data manipulations we make to the provided datasets, exploratory analysis, models considered and fitted, and our results and findings.
 
 ### Research questions
-_Use bullet points to to describe the research questions you are going to address. Write in full sentences._
 
-## Informative title for section addressing a research question
+The research questions in this report are all based around gaining more insight about Black Saber's salary, promotion and hiring process and whether or not they are fair on the basis of gender parity. These research questions include:
 
-_For each research question, you will want to briefly describe any data manipulation, show some exploratory plots/summary tables, report on any methods you use (i.e. models you fit) and the conclusions you draw from these_
+* What factors, such as productivity, leadership for level and gender, etc. are related to an employee's salary?
+* What factors, such as productivity, leadership for level and gender, etc. are related to the number of promotions an employee receives?
+* What factors, such as gpa, work experience, extracurriculars, gender, etc. are related to new-grad candidates being hired?
 
-```{r}
+## Analysis of Gender Parity in Black Saber's Employee Salaries
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
 # This chunk provides an example of some things you can do with RMarkdown to make your report creation process easier
 
 # read in the data
@@ -82,42 +73,461 @@ ggsave("images/example.png", width = 7, height = 4)
 # norice how the image is included with the ![](file/path.png) below
 ```
 
-![](images/example.png)
+<!-- ![](images/example.png) -->
 
-## Informative title for section addressing a research question
-## Informative title for section addressing a research question
+The dataset we are working with contains 6906 observations of current employees at Black Saber. We began by filtering out all observations that had listed "Prefer not to say" in its gender column, which left us with 6789 observations. Next, we seperated the financial_q column into its respective columns for year and financial quarter. We also made a manipulation to convert the salaries in the data from a character type to an integer type, as well as factor releveling the role_seniority column, so that it was in the appropriate ascending order from "Entry-Level" to "Vice President".
 
-```{r, include = FALSE}
-library(tidyverse)
-library(lme4)
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# Data wrangling for black saber current employees (salary)
+current_employees_dataset <- black_saber_current_employees %>% filter(gender == "Man" | gender == "Woman") %>%
+  mutate(year = case_when(
+    str_detect(financial_q, "2020") ~ "2020",
+    str_detect(financial_q, "2019") ~ "2019",
+    str_detect(financial_q, "2018") ~ "2018",
+    str_detect(financial_q, "2017") ~ "2017",
+    str_detect(financial_q, "2016") ~ "2016",
+    str_detect(financial_q, "2015") ~ "2015",
+    str_detect(financial_q, "2014") ~ "2014",
+    TRUE ~ "2013"
+  )) %>%
+  mutate(quarter = case_when(
+    str_detect(financial_q, "Q1") ~ "Q1",
+    str_detect(financial_q, "Q2") ~ "Q2",
+    str_detect(financial_q, "Q3") ~ "Q3",
+    TRUE ~"Q4"
+  )) %>%
+  mutate(salary_value = as.integer(str_remove(str_remove(salary, "\\$"), "\\,"))) %>%
+  mutate(role_seniority = fct_relevel(role_seniority, "Director", after = 7)) %>%
+  mutate(role_seniority = fct_relevel(role_seniority, "Manager", after = 6))
+
+
 ```
+
+A premise of this analysis is that we suspect that an employee at Black Saber's salary can be explained from their gender from the data between 2013 and 2020.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+current_employees_dataset_grpGender <- group_by(current_employees_dataset, gender)
+
+gender_salary_table <- summarise(current_employees_dataset_grpGender,
+          observations = n(),
+          minimum_salary = min(salary_value),
+          maximum_salary = max(salary_value),
+          mean_salary = mean(salary_value),
+          median_salary = median(salary_value))
+
+colnames_for_table <- c("gender","observations", "minimum salary", "maximum salary", "mean salary", "median salary")
+
+colnames(gender_salary_table) <- colnames_for_table
+
+knitr::kable(gender_salary_table, align = c("r", "r"), caption = "Summary of salaries by gender at Black Saber from 2013 to 2020") %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+From Table 1, we can clearly see that, on average, men at Black Saber have higher salaries than women. Fitting a boxplot comparing salaries of men and women across the years, we also observe that after 2016, men tend to have higher salaries than females. Therefore, we will be considering gender as a fixed covariate in our model to test its significance in predicting an employee's salary at Black Saber.
+
+Upon fitting a histogram to salaries from the current employees dataset, we noticed that there is a right skew to the distribution. Considering the seniority covariate, we are able to correct much of that skew.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, fig.width=6, fig.height=3, fig.align='center'}
+# Data visualizations for black saber current employees
+# current_employees_dataset %>% 
+#   ggplot(aes(x = year, y = salary_value, fill = gender)) +
+#   geom_boxplot()
+# 
+# current_employees_dataset %>%
+#   ggplot(aes(x = salary_value, fill = gender)) +
+#   geom_histogram(bins = 15) +
+#   facet_wrap(~role_seniority)
+# 
+# current_employees_dataset %>%
+#   ggplot(aes(x = team, y = salary_value, fill = gender)) +
+#   geom_boxplot() +
+#   coord_flip()
+
+current_employees_dataset %>%
+  ggplot(aes(x = role_seniority, y = salary_value, fill = gender)) +
+  geom_boxplot() +
+  coord_flip() +
+  labs(caption = "Figure 1: Boxplot of Salaries and Seniority for Men and Women", x = "salary", y = "seniority")
+```
+
+From Figure 1, we can see that after conditioning salary on seniority and roles, the boxplots indicate more of a normal distribution within each roles for both men and women. Thus, these visualizations and exploratory analysis helped us with selecting a linear mixed model to predict salaries at Black Saber.
+
+We chose a linear mixed model to predict salaries at Black Saber because our simple linear model assumptions are violated since our observations are not independent due to employees being measured more than once within and across the years. Also, we can see that the response type, salary, follows a normal distribution when considering the grouping of seniority, and that random effects can be considered for each employee, year, and team.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# linear mixed model with fixed effects for gender, productivity, role_seniority, and leadership_for_level and random intercepts for team, year, and employee_id
+lmm_1 <- lmer(salary_value ~ gender + productivity + leadership_for_level + (1 | role_seniority) + (1 | team) + (1 | year) + (1 | employee_id), data = current_employees_dataset)
+
+summary(lmm_1)
+
+# run residual diagnostic plot on the model
+#plot(lmm_1)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# linear mixed model with random slope for leadership_for_level on each role_seniority
+lmm_2 <- lmer(salary_value ~ gender + productivity + leadership_for_level + (1 + leadership_for_level | role_seniority) + (1 | team) + (1 | year) + (1 | employee_id), data = current_employees_dataset)
+
+summary(lmm_2)
+
+# run residual diagnostic plot on the model
+#plot(lmm_2)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# test the model with a random slope for leadership_for_level for different role_seniority against the simpler model
+
+# lmtest::lrtest(lmm_1, lmm_2)
+
+knitr::kable(lmtest::lrtest(lmm_1, lmm_2), align = c("r", "r"), caption = "Likelihood Ratio Test for The Linear Mixed Models on Salaries") %>%
+   kable_styling(latex_options = "hold_position")
+```
+
+We considered two linear mixed models, with fixed effects for gender, productivity and leadership for level, and random intercepts for the team, year, and employee ID. One model was fitted with a random intercept for the role/seniority, and another model was fitted with a random slope for role/seniority for different leadership for level. We performed a Likelihood ratio test (Table 2), which is appropriate given the two models have the same fixed effects and are only comparing nested random effects, and observed a chi-square test statistic of 27.923 at a p-value of 3.768e-5. Thus, random slopes for role/seniority explains the data better than a random intercept for role/seniority and we have very strong evidence against the hypothesis that the simpler model fits the data just as well.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+knitr::kable(coef(summary(lmm_2)), align = c("r", "r"), caption = "Summary of Coefficients for The Linear Mixed Model on Salaries") %>%
+   kable_styling(latex_options = "hold_position")
+#confint(lmm_1)
+```
+
+In conclusion, from Table 3, our linear mixed model shows that women at Black Saber have salaries that are, on average, $2251.21 less than men at Black Saber. At a t-value of -8.132547, and given that our 95% confidence interval for the gender covariate is (-2799.25, -1712.30), we observe that the gender covariate is significant in predicting salaries of current employees at Black Saber, which could potential lead to some gender parity issues.
+
+## Analysis of Gender Parity in Black Saber's Employee Promotions
+
+<!-- The purpose of this report is to explore factors related to promotions for Black Saber employees.
+(What factors, such as productivity, leadership for level and gender, are related to an employee's promotions) -->
+
+We began by taking the dataset used in the analysis of gender parity and employee salary section, which had 6789 observations. Next, we created a role/seniority index variable that assigned a value from 0 to 8 to the roles of "Entry-level" to "Vice President", respectively. We also grouped our dataset my employee IDs and created a new variable called promotions, which took the difference between an employees most recent role and their first role at the company to calculate how many promotions they have had at Black Saber.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# Data wrangling for black saber current employees (promotions)
+promotions_data <- current_employees_dataset %>% 
+  mutate(role_seniority_index = case_when(
+    str_detect(role_seniority, "Entry-level") ~ 0,
+    str_detect(role_seniority, "\\bJunior I\\b") ~ 1,
+    str_detect(role_seniority, "\\bJunior II\\b") ~ 2,
+    str_detect(role_seniority, "\\bSenior I\\b") ~ 3,
+    str_detect(role_seniority, "\\bSenior II\\b") ~ 4,
+    str_detect(role_seniority, "\\bSenior III\\b") ~ 5,
+    str_detect(role_seniority, "Manager") ~ 6,
+    str_detect(role_seniority, "Director") ~ 7,
+    TRUE ~ 8
+  )) %>% group_by(employee_id) %>%
+  mutate(promotions = max(role_seniority_index) - min(role_seniority_index))
+```
+
+A premise of this analysis is that we suspect that gender explains the number of promotions an employee has at Black Saber in the data between 2013 and 2020. Upon fitting a histogram to promotions from the current employee dataset, we noticed that there is a right skew to the distribution. Since our response variable, promotion, is a count, we will be considering a Poisson regression model.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, fig.width=6, fig.height=3, fig.align='center'}
+# Data visualizations for Black Saber's current employees promotions
+# promotions_data %>%
+#   ggplot(aes(x = promotions)) +
+#   geom_histogram(bins = 8)
+
+promotions_data %>%
+  ggplot(aes(x = team, y = promotions, fill = gender)) +
+  geom_boxplot() +
+  coord_flip() +
+    labs(caption = "Figure 2: Boxplot of Promotions and Teams for Men and Women")
+
+# promotions_data %>%
+#   ggplot(aes(x = leadership_for_level, y = promotions, fill = gender)) +
+#   geom_boxplot()
+
+```
+
+From Figure 2, we can see that by grouping employee promotions into the different teams at Black Saber, the boxplots indicate that for half the teams, client services, data, legal and finance, and marketing and sales, men usually have a higher median number of promotions during their time at Black Saber than women do. Hence, these visualizations and exploratory analysis helped us with selecting a generalized linear mixed model with a Poisson distribution to predict the number of promotions for an employee at Black Saber.
+
+We chose a generalized linear mixed model to predict salaries at Black Saber because our observations are not independent due to the groupings of employees into different teams. Also, we can see that the response type, promotion, follows a Poisson distribution, and that potential random effects can be considered for each employee, year, and team.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a poisson model
+promotions_glm <- glm(promotions ~ gender + leadership_for_level + productivity, family = poisson, data = promotions_data)
+
+summary(promotions_glm)
+
+confint(promotions_glm)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# exponentiated coefficients
+exp(coef(promotions_glm))
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# Goodness-of-fit test
+1 - pchisq(promotions_glm$deviance, promotions_glm$df.residual)
+```
+
+We began by fitting a Poisson model with fixed effects for gender, leadership for level, and productivity. Looking at the summary, we found that both gender (z-value: -13.197 and p-value: < 2e-16) and the exceeds expectation (z-value: 6.037 and p-value: 1.57e-9) covariates were statistically significant. However, a goodness-of-fit test reveals that there remains significant lack-of-fit (residual deviance: 8758.7 with only 6784 df; p-value < .001 based on chi square test with 6784 df).
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a poisson mixed model with random intercepts for employee_id and teams
+promotions_glmm <- lme4::glmer(promotions ~ gender + leadership_for_level + productivity + (1 | team) + (1 | year), 
+                              family = "poisson", data = promotions_data, nAGQ = 0)
+
+summary(promotions_glmm)
+```
+
+Then, we fitted a Generalized linear mixed model with Poisson family, fixed effects for gender, leadership for level, productivity, and random intercepts for the team and year. Looking at the summary, we found that gender (z-value: -13.244 and p-value: < 2e-16) the exceeds expectation (z-value: 3.268 and p-value: 0.00108), and the productivity (z-value: 2.836 and p-value: 0.00456) covariates were statistically significant.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# test for significance of model coefficients (Drop-in-deviance test to compare models)
+
+# anova(promotions_glm, promotions_glmm, test = "Chisq")
+
+knitr::kable(anova(promotions_glm, promotions_glmm, test = "Chisq"), align = c("r", "r"), caption = "Drop-in-Deviance Test/Analysis of Deviance Table for GLM and GLMM on Promotions") %>%
+   kable_styling(latex_options = "hold_position")
+```
+
+We performed a Drop-in-deviance test (Table 4) using an Analysis of Deviance table to compare the two models and test for the significance of our model coefficients. The drop-in-deviance test statistic for gender was 228.766 on 1 df, producing a p-value of < 2.2e-16 and the drop-in-deviance test statistic for leadership for level was 31.704 on 2 df, producing a p-value of 1.305e-7. Thus, there is strong evidence against the null hypothesis that a simpler model without gender or leadership for level covariates would better explain our data on promotions.
+
+In conclusion, our Poisson mixed model shows that women at Black Saber, on average, receive 0.742 times the promotions that men do during their time at Black Saber. Given that our 95% confidence interval for the gender covariate is (0.718, 0.782), we observe that the gender covariate is, again, significant in predicting the number of promotions for current employees at Black Saber, which could also potentially lead to some gender parity issues.
+
+## Analysis of Gender Parity in Black Saber's Hiring Process
+
+<!-- The purpose of this report is to explore factors related to applicants moving forward in Black Saber's hiring pipeline, both the AI-automated and human phases of the process.
+(What factors, such as CV, cover letter, gpa, gender, etc are related to a candidate moving forward from phase 1) -->
+
+The dataset we are working with contains 613 observations of Black Saber phase 1 applicants. We began by filtering out all observations that had listed "Prefer not to say" in its gender column, which left us with 602 observations. Next, we performed a left join with the phase 2 applicants dataset and another left join with the phase 3 applicants dataset in order to combine it into one comprehensive dataset for analyzing the AI automated component of the hiring process. We also created a "move forward from phase 1" and a "moved forward from phase 2" variable, and removed the interviewer rating variables from this dataset. Next, we took the phase 3 applicants dataset and performed a left join with the phase 1 applicant dataset to get the gender and "team applied for" into this dataset for analysis of the human component of the hiring process. Lastly, we left joined the dataset with the final hire dataset in order to get the applicants that passed phase 3 of the hiring process and created a combined rating variable for the combined score on both interviews in phase 3.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# read in the data
+black_saber_phase_1_applicants <- read_csv("data/phase1-new-grad-applicants-2020.csv")
+black_saber_phase_2_applicants <- read_csv("data/phase2-new-grad-applicants-2020.csv")
+black_saber_phase_3_applicants <- read_csv("data/phase3-new-grad-applicants-2020.csv")
+black_saber_final_hire <- read_csv("data/final-hires-newgrad_2020.csv")
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# data wrangling for phase 1 and 2 (AI automated) applicants dataset
+
+AI_hiring_data <- black_saber_phase_1_applicants %>% filter(gender == "Man" | gender == "Woman") %>%
+  left_join(black_saber_phase_2_applicants) %>%
+  left_join(black_saber_phase_3_applicants) %>%
+  mutate(moved_forward_from_phase_1 = ifelse(is.na(technical_skills),
+                                yes = 0, no = 1)) %>%
+  mutate(moved_forward_from_phase_2 = ifelse(!is.na(interviewer_rating_1) & !is.na(technical_skills),
+                                yes = 1, no = 0)) %>%
+  select(-c(interviewer_rating_1, interviewer_rating_2))
+
+# data wrangling for phase 3 applicants dataset
+
+black_saber_final_hire <- black_saber_final_hire %>%
+  mutate(hired = 1)
+
+phase_3_hiring_data <- black_saber_phase_3_applicants %>%
+  left_join(black_saber_phase_1_applicants) %>%
+  select(-c(cover_letter, cv, gpa, extracurriculars, work_experience)) %>%
+  left_join(black_saber_final_hire) %>%
+  mutate(combined_rating = interviewer_rating_1 + interviewer_rating_2) %>%
+  mutate(hired = ifelse(is.na(hired),
+                                yes = 0, no = 1))
+
+# data wrangling for overall hiring process
+# overall_hiring_data <- AI_hiring_data %>%
+#   left_join(phase_3_hiring_data)
+```
+
+A premise of this analysis is that we suspect that gender explains the candidates that are hired in Black Saber's hiring process in the data. Upon fitting a scatterplot of technical skills against those that move forward from phase 2 in the AI automated hiring dataset, we noticed that men had increasingly higher probability of moving forward than women at a scores greater than 25. Since our response variables, moving forward in phase 1 and 2 and status of hire in phase 3, are all probabilities, we will be considering a Logistic (Binomial) regression model.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, fig.width=6, fig.height=3, fig.align='center'}
+# data visualizations for data from phase 1 and 2 (AI automated) applicants
+# AI_hiring_data %>%
+#   ggplot(aes(x = moved_forward_from_phase_1, fill = gender)) +
+#   geom_histogram(bins = 2)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = gpa, y = moved_forward_from_phase_2, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = work_experience, y = moved_forward_from_phase_1, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = extracurriculars, y = moved_forward_from_phase_1, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = technical_skills, y = moved_forward_from_phase_2, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = writing_skills, y = moved_forward_from_phase_2, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = speaking_skills, y = moved_forward_from_phase_2, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# AI_hiring_data %>%
+#   ggplot(aes(x = leadership_presence, y = moved_forward_from_phase_2, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# data visualizations for data from phase 3 applicants
+# phase_3_hiring_data %>%
+#     ggplot(aes(x = interviewer_rating_1, y = hired, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+# 
+# phase_3_hiring_data %>%
+#     ggplot(aes(x = interviewer_rating_2, y = hired, color = gender)) +
+#   geom_point() +
+#   geom_smooth(method = "glm", 
+#     method.args = list(family = "binomial"), 
+#     se = FALSE)
+
+phase_3_hiring_data %>%
+    ggplot(aes(x = combined_rating, y = hired, color = gender)) +
+  geom_point() +
+  geom_smooth(method = "glm", 
+    method.args = list(family = "binomial"), 
+    se = FALSE) +
+  labs(caption = "Figure 3: Scatterplot of Combined Interview ratings and Hires for Men and Women", x = "combined interview rating")
+
+# phase_3_hiring_data %>% ggplot(aes(x = hired, fill = gender)) +
+#   geom_histogram(bins = 2)
+```
+
+From Figure 3, we can see that in the phase 3 hiring dataset, a scatterplot of the combined interviewer ratings against the applicants that were hired follows a Binomial/Logistic distribution. Thus, these visualizations and exploratory analysis helped us with selecting a generalized linear mixed model with a binomial distribution to predict the probability of being hired in the Black Saber phase 3 hiring process. We also considered fitting a generalized linear mixed model with a binomial distribution to predict the probability of moving forward in phase 1 and phase2 in the AI automated dataset.
+
+We chose a generalized linear mixed model to predict salaries at Black Saber because our observations are not independent due to the groupings of applicants into different teams that they applied for. Also, we can see that the response type, moving forward in phase 1, moving forward in phase 2, and being hired, all follows a Binomial distribution, and that potential random effects can be considered for each applicant and team applied for.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear model to the phase 1 applicants dataset
+AI_phases_1_glm <- glm(moved_forward_from_phase_1 ~ cover_letter + cv + gpa + gender + extracurriculars + work_experience, 
+               family = binomial(link = "logit"), data = AI_hiring_data)
+
+summary(AI_phases_1_glm)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear mixed model to the phase 1 applicants dataset with random intercepts for applicant_id and team_applied_for
+AI_phases_1_glmm <- lme4::glmer(moved_forward_from_phase_1 ~ cover_letter + cv + gpa + gender + extracurriculars + work_experience + (1 | applicant_id) + (1 | team_applied_for), 
+                              family = "binomial", data = AI_hiring_data, nAGQ = 0)
+
+summary(AI_phases_1_glmm)
+```
+
+We began by fitting a Generalized linear model with "moving forward from phase 1" as the response, fixed effects for cover letter, cv, gpa, gender, extracurriculars, and work experience, and a Binomial family. Then we fitted a Generalized linear mixed model with the same response, fixed effects and family, and the addition of random intercepts for each applicant and the team applied for.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# test for significance of model coefficients (Drop-in-deviance test to compare models)
+
+# anova(AI_phases_1_glm, AI_phases_1_glmm, test = "Chisq")
+
+knitr::kable(anova(AI_phases_1_glm, AI_phases_1_glmm, test = "Chisq"), align = c("r", "r"), caption = "Drop-in-Deviance Test/Analysis of Deviance Table for GLM and GLMM on Phase 1") %>%
+   kable_styling(latex_options = "hold_position")
+```
+
+We performed a Drop-in-deviance test (Table 5) to compare the models and test for the significance of model coefficients and found that gender was the only covariate that yielded a p-value > 0.1 (p-value = 0.3545). Thus there is no evidence against the null hypothesis that gender explains applicants moving forward from phase 1 in the AI automated hiring dataset.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear model to the AI phases applicants dataset
+AI_phase_2_glm <- glm(moved_forward_from_phase_2 ~ gender + technical_skills + writing_skills + leadership_presence + speaking_skills, 
+               family = binomial(link = "logit"), data = AI_hiring_data)
+
+summary(AI_phase_2_glm)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear mixed model to the AI phases applicants dataset with random intercepts for applicant_id and team_applied_for
+AI_phase_2_glmm <- lme4::glmer(moved_forward_from_phase_2 ~ gender + technical_skills + writing_skills + leadership_presence + speaking_skills + (1 | applicant_id) + (1 | team_applied_for), 
+                              family = "binomial", data = AI_hiring_data, nAGQ = 0)
+
+summary(AI_phase_2_glmm)
+```
+
+Next, we fitted a Generalized linear model with "moving forward from phase 2" as the response, fixed effects for gender, technical skills, writing skills, leadership presence and speaking skills, and a Binomial family. Then we fitted a Generalized linear mixed model with the same response, fixed effects and family, and the addition of random intercepts for each applicant and the team applied for.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# test for significance of model coefficients (Drop-in-deviance test to compare models)
+
+# anova(AI_phase_2_glm, AI_phase_2_glmm, test = "Chisq")
+
+knitr::kable(anova(AI_phase_2_glm, AI_phase_2_glmm, test = "Chisq"), align = c("r", "r"), caption = "Drop-in-Deviance Test/Analysis of Deviance Table for GLM and GLMM on Phase 2") %>%
+   kable_styling(latex_options = "hold_position")
+```
+
+Again, we performed a Drop-in-deviance test (Table 6) to compare the models and test for the significance of model coefficients and found that gender was the only covariate that yielded a p-value = 0.0567316. Thus there is weak evidence against the null hypothesis that gender explains applicants moving forward from phase 2 in the AI automated hiring dataset.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear model to the phase 3 applicants dataset
+phase_3_glm <- glm(hired ~ interviewer_rating_1 + interviewer_rating_2 + gender, 
+               family = binomial(link = "logit"), data = phase_3_hiring_data)
+
+summary(phase_3_glm)
+```
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, include=FALSE}
+# fit a generalized linear mixed model to the phase 3 applicants dataset with random intercepts for applicant_id and team_applied_for
+phase_3_glmm <- lme4::glmer(hired ~ interviewer_rating_1 + interviewer_rating_2 + gender + (1 | applicant_id) + (1 | team_applied_for), 
+                              family = "binomial", data = phase_3_hiring_data, nAGQ = 0)
+
+summary(phase_3_glmm)
+```
+
+Finally, we took a look at the phase 3 hiring dataset and fitted a Generalized linear model with "hired" as the response, fixed effects for gender, interviewer rating 1 and interviewer rating 2, and a Binomial family. Then we fitted a Generalized linear mixed model with the same response, fixed effects and family, and the addition of random intercepts for each applicant and the team applied for.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE}
+# test for significance of model coefficients (Drop-in-deviance test to compare models)
+
+# anova(phase_3_glm, phase_3_glmm, test = "Chisq")
+
+knitr::kable(anova(phase_3_glm, phase_3_glmm, test = "Chisq"), align = c("r", "r"), caption = "Drop-in-Deviance Test/Analysis of Deviance Table for GLM and GLMM on Phase 3") %>%
+   kable_styling(latex_options = "hold_position")
+```
+
+Again, we performed a Drop-in-deviance test (Table 7) to compare the models and test for the significance of model coefficients and found that gender was the only covariate that yielded a p-value > 0.1 (p-value = 0.9999591). Thus there is no evidence against the null hypothesis that gender explains applicants being hired in the phase 3 hiring dataset.
+
+In conclusion, our Logistic mixed models showed that in all 3 phases of the hiring process, gender had little to no effect on whether or not an applicant moved forward from the first 2 phases and whether or not an applicant was hired in the phase 3. This is potentially good news on the topic of gender parity in Black Saber's hiring process as it suggests that in each step, the covariates other than gender are all statistically significant (p-value < 0.001) and explain most of whether or not an applicant moves forward or is hired.
 
 ## Discussion
 
-_In this section you will summarize your findings across all the research questions and discuss the strengths and limitations of your work. It doesn't have to be long, but keep in mind that often people will just skim the intro and the discussion of a document like this, so make sure it is useful as a semi-standalone section (doesn't have to be completely standalone like the executive summary)._
+We found that with regards to salaries and promotions at Black Saber, women have salaries that are $2251.21 less than men and have 0.742 times the promotions that men have while working at Black Saber, on average. In addition, we observed that with regards to Black Saber's hiring process, applicants' gender showed weak to no evidence (p-value > 0.05) in explaining whether or not they moved forward in phase 1 and 2 and whether or not they were hired. As for the topic of gender parity in hiring, wages and promotion, we believe there is a need to be out and ahead of the potential issues in the wages and promotions department.
 
-### Strengths and limitations
+### Limitations
+
+A limitations of this analysis may result from the definition of certain covariates used in addressing the research questions. Things such as productivity scores, leadership for level, leadership presence, etc, may be subjective to those acquiring the dataset at Black Saber. This may suggest some ineffective covariates for the response variables.
+
+Another limitation is that size of the dataset for the hiring process may not be sufficient to make a significant conclusion on any factors and their effects on being hired. We might suggest acquiring a larger sample in the future and performing another statistical analysis on the covariates.
+
+Finally, a limitation may be related to confidentiality. Depending on who is acquiring the datasets for the current employees and hiring process, there may be some bias for certain categorical covariates and/or in the interviewer ratings from those administering the performance review or interview.
 
 \newpage
 # Consultant information
 ## Consultant profile
 
-*Complete this section with a brief bio for each member of your group. If you are completing the project individually, you only need to complete one for yourself. In that case, change the title of this section to 'Consultant profile' instead. Examples below. This section is only marked for completeness, clarity and professionalism, not 'truth' so you can write it as if we're a few years in the future. Put your current degree in as completed and/or add your first choice grad school program, whatever you like. What skills related skills would you most like to highlight? What job title do you want?*
-
-**Statsy McStatsstats**. Statsy is a senior consultant with Eminence Analytics. She specializes in data visualization. Statsy earned her Bachelor of Science, Specialist in Statistics Methods and Practice, from the University of Toronto in 2023.
-
-**Datana Scatterplot**. Datana is a junior consultant with Eminence Analytics. They specialize in reproducible analysis and statistical communication. Datana earned their Bachelor of Science, Majoring in Computer Science and Statistics from the University of Toronto in 2024.
-
 **Ryan Jo Wong**. Ryan is a junior consultant with Research and Developing Insight (RADI). He specializes in data wrangling and visualizations, and statistical analysis. Ryan earned an Honours Bachelor of Science, Majoring in Statistics and Minoring in Computer Science and Mathematics from the University of Toronto in 2022.
 
 ## Code of ethical conduct
 
-_This section should be fairly short, no more than half a page. Assume a general audience, much like your executive summary._
-
-* _Make at least three relevant statements about your company’s approach to ethical statistical consulting. These should be appropriately in line with professional conduct advice like the (Statistical Society of Canada Code of Conduct)[https://ssc.ca/sites/default/files/data/Members/public/Accreditation/ethics_e.pdf] or the (Ethical Guidelines for Statistical Practice from the American Statistical Society)[https://www.amstat.org/ASA/Your-Career/Ethical-Guidelines-for-Statistical-Practice.aspx]. For example, "the customer is always right" ISN’T the type of thing an ethical statistical consultant would include._
-*	_Be very careful not to just copy and paste from these other documents! Put things in your own words._
-
 Here at Research and Developing Insight (RADI), we believe that it is essential to uphold high standards in our statistical practices and be responsible when delivering statistical insight to our clients and stakeholders. Thus, we adhere strongly to the Statistical Society of Canada's (SSC) Code of Ethical Statistical Practice. 
-With regards to society, our mission is to provide objective, unbiased information with the goal of improving public knowledge and avoiding misleading information in our reports. We hold fast to the privacy laws and standards set forth by the SSC as it pertains to the collection, storage, and publication of data and findings. With our employers and clients, it is important that we remain constantly aware of any potential conflicts between our ethical practices and the interests of the client, and to refrain from any misleading summaries or findings from our data in reports. It is our utmost priority to avoid disclosing any confidential and/or sensitive information acquired without the explicit consent from our employers and clients. Our duty is to remain professional in keeping good statistical practices and standards by only taking on projects that are within the skill set and capacity of our team. In addition, we refuse to partake in projects where the outcomes or findings in our statistical reports dictate the financial gains and rewards for our services. 
-
-__Final advice: KNIT EARLY AND OFTEN!__
+With regards to society, our mission is to provide objective, unbiased information with the goal of improving public knowledge and avoiding misleading information in our reports. We hold fast to the privacy laws and standards set forth by the SSC as it pertains to the collection, storage, and publication of data and findings.
+With our employers and clients, it is important that we remain constantly aware of any potential conflicts between our ethical practices and the interests of the client, and to refrain from any misleading summaries or findings from our data in reports. It is our utmost priority to avoid disclosing any confidential and/or sensitive information acquired without the explicit consent from our employers and clients. 
+Our duty is to remain professional in keeping good statistical practices and standards by only taking on projects that are within the skill set and capacity of our team. In addition, we refuse to partake in projects where the outcomes or findings in our statistical reports dictate the financial gains and rewards for our services. 
