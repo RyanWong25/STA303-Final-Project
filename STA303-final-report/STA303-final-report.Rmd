@@ -10,7 +10,7 @@ output:
     toc: true
     toc_depth: 2
 titlepage: true
-titlepage-color: "096192"
+titlepage-color: "25355A"
 titlepage-text-color: "FFFFFF"
 titlepage-rule-color: "FFFFFF"
 titlepage-rule-height: 2
@@ -27,13 +27,75 @@ knitr::opts_chunk$set(include=TRUE)
 \newpage
 # Executive summary
 
-_Guidelines for the executive summary:_
+Internally, employees at Black Saber have been raising concerns about potential biases in the company's hiring and remuneration processes. Black Saber has approached us with the task to take a look at current Black Saber employee data and the new-grad hiring data so that we can provide an analysis and insight on the issues around this topic of gender parity. The main research questions that this report will be focusing on will be identifying the specific factors, including potentially gender, that are related to Black Saber employee salaries, the number of promotions an employee at Black Saber receives while they are working there, and the whether or not a new-grad candidate is hired.
 
-* _No more than two pages_
-* _Language is appropriate for a non-technical audience_
-* _Bullet points are used where appropriate_
-*	_A small number of key visualizations and/or tables are included_
-*	_All three research questions are addressed_
+We found that, gender is a significant factor in determining the wages and promotions received by current Black Saber employees, but it is not significant in determining whether a new-grad candidate is hired through Black Saber's hiring pipeline. 
+
+The results of the report are summarized below.
+
+* After 2016, men tend to have higher salaries than females.
+* On average, women working at Black Saber have salaries that are $2251.21 less than men.
+* For the client services team, data team, legal and finance team, and marketing and sales team, men usually have a higher median number of promotions during their time at Black Saber than women do.
+* On average, women receive 0.742 (about 3/4th) times the promotions that men do during their time working at Black Saber.
+* In phase 2 of the AI automated hiring pipeline, men had increasingly higher probabilities of moving forward compared to women at technical skills scores greater than 25.
+* In all 3 phases of the hiring process, gender had little to no effect on whether or not an candidate moved forward from the first 2 phases and whether or not a candidate was hired in phase 3.
+
+Key visualizations of the report are summarized below.
+
+```{r, message = FALSE, echo=FALSE, warning=FALSE, fig.width=7, fig.height=4, fig.align='center'}
+# read in the data
+black_saber_current_employees <- read_csv("data/black-saber-current-employees.csv")
+black_saber_phase_1_applicants <- read_csv("data/phase1-new-grad-applicants-2020.csv")
+black_saber_phase_2_applicants <- read_csv("data/phase2-new-grad-applicants-2020.csv")
+black_saber_phase_3_applicants <- read_csv("data/phase3-new-grad-applicants-2020.csv")
+
+# Data wrangling for black saber current employees (salary)
+current_employees_dataset <- black_saber_current_employees %>% filter(gender == "Man" | gender == "Woman") %>%
+  mutate(year = case_when(
+    str_detect(financial_q, "2020") ~ "2020",
+    str_detect(financial_q, "2019") ~ "2019",
+    str_detect(financial_q, "2018") ~ "2018",
+    str_detect(financial_q, "2017") ~ "2017",
+    str_detect(financial_q, "2016") ~ "2016",
+    str_detect(financial_q, "2015") ~ "2015",
+    str_detect(financial_q, "2014") ~ "2014",
+    TRUE ~ "2013"
+  )) %>%
+  mutate(quarter = case_when(
+    str_detect(financial_q, "Q1") ~ "Q1",
+    str_detect(financial_q, "Q2") ~ "Q2",
+    str_detect(financial_q, "Q3") ~ "Q3",
+    TRUE ~"Q4"
+  )) %>%
+  mutate(salary_value = as.integer(str_remove(str_remove(salary, "\\$"), "\\,"))) %>%
+  mutate(role_seniority = fct_relevel(role_seniority, "Director", after = 7)) %>%
+  mutate(role_seniority = fct_relevel(role_seniority, "Manager", after = 6))
+
+# Data wrangling for phase 1 and 2 (AI automated) applicants dataset
+AI_hiring_data <- black_saber_phase_1_applicants %>% filter(gender == "Man" | gender == "Woman") %>%
+  left_join(black_saber_phase_2_applicants) %>%
+  left_join(black_saber_phase_3_applicants) %>%
+  mutate(moved_forward_from_phase_1 = ifelse(is.na(technical_skills),
+                                yes = 0, no = 1)) %>%
+  mutate(moved_forward_from_phase_2 = ifelse(!is.na(interviewer_rating_1) & !is.na(technical_skills),
+                                yes = 1, no = 0)) %>%
+  select(-c(interviewer_rating_1, interviewer_rating_2))
+
+# Data visualizations for black saber current employees (salary)
+current_employees_dataset %>% 
+  ggplot(aes(x = year, y = salary_value, fill = gender)) +
+  geom_boxplot() +
+  labs(caption = "Figure I: Boxplot of Salaries by Year for Men and Women", y = "salary")
+
+# Data visualizations for black saber phase 2 hiring
+AI_hiring_data %>%
+  ggplot(aes(x = technical_skills, y = moved_forward_from_phase_2, color = gender)) +
+  geom_point() +
+  geom_smooth(method = "glm", 
+    method.args = list(family = "binomial"), 
+    se = FALSE) +
+  labs(caption = "Figure II: Scatterplot of Probability of moving on from Phase 2 vs. Technical Skills for Men and Women", x = "technical skills score", y = "probability of moving on from phase 2")
+```
 
 
 \newpage
@@ -54,26 +116,9 @@ The research questions in this report are all based around gaining more insight 
 ## Analysis of Gender Parity in Black Saber's Employee Salaries
 
 ```{r, message = FALSE, echo=FALSE, warning=FALSE}
-# This chunk provides an example of some things you can do with RMarkdown to make your report creation process easier
-
 # read in the data
 black_saber_current_employees <- read_csv("data/black-saber-current-employees.csv")
-
-# create a visualisation
-my_plot <- black_saber_current_employees %>% 
-  ggplot(aes(x = productivity)) +
-  geom_histogram(colour = "grey", fill = "#6C3082") +
-  theme_minimal() +
-  labs(title = "Look! A title. But do you want a title or a caption for your report?", x = "This is a changed x label")
-
-# save your plot in your images folder, you can specify the height and width, too
-# saving this means you can add the image to your exectuve summary without having to run or rerun the code, if you wish
-ggsave("images/example.png", width = 7, height = 4)
-
-# norice how the image is included with the ![](file/path.png) below
 ```
-
-<!-- ![](images/example.png) -->
 
 The dataset we are working with contains 6906 observations of current employees at Black Saber. We began by filtering out all observations that had listed "Prefer not to say" in its gender column, which left us with 6789 observations. Next, we seperated the financial_q column into its respective columns for year and financial quarter. We also made a manipulation to convert the salaries in the data from a character type to an integer type, as well as factor releveling the role_seniority column, so that it was in the appropriate ascending order from "Entry-Level" to "Vice President".
 
@@ -131,7 +176,8 @@ Upon fitting a histogram to salaries from the current employees dataset, we noti
 # Data visualizations for black saber current employees
 # current_employees_dataset %>% 
 #   ggplot(aes(x = year, y = salary_value, fill = gender)) +
-#   geom_boxplot()
+#   geom_boxplot() +
+#   labs(caption = "Figure 0: Boxplot of Salaries by for Men and Women", y = "salary")
 # 
 # current_employees_dataset %>%
 #   ggplot(aes(x = salary_value, fill = gender)) +
@@ -324,10 +370,6 @@ phase_3_hiring_data <- black_saber_phase_3_applicants %>%
   mutate(combined_rating = interviewer_rating_1 + interviewer_rating_2) %>%
   mutate(hired = ifelse(is.na(hired),
                                 yes = 0, no = 1))
-
-# data wrangling for overall hiring process
-# overall_hiring_data <- AI_hiring_data %>%
-#   left_join(phase_3_hiring_data)
 ```
 
 A premise of this analysis is that we suspect that gender explains the candidates that are hired in Black Saber's hiring process in the data. Upon fitting a scatterplot of technical skills against those that move forward from phase 2 in the AI automated hiring dataset, we noticed that men had increasingly higher probability of moving forward than women at a scores greater than 25. Since our response variables, moving forward in phase 1 and 2 and status of hire in phase 3, are all probabilities, we will be considering a Logistic (Binomial) regression model.
@@ -388,19 +430,6 @@ A premise of this analysis is that we suspect that gender explains the candidate
 #     se = FALSE)
 # 
 # data visualizations for data from phase 3 applicants
-# phase_3_hiring_data %>%
-#     ggplot(aes(x = interviewer_rating_1, y = hired, color = gender)) +
-#   geom_point() +
-#   geom_smooth(method = "glm", 
-#     method.args = list(family = "binomial"), 
-#     se = FALSE)
-# 
-# phase_3_hiring_data %>%
-#     ggplot(aes(x = interviewer_rating_2, y = hired, color = gender)) +
-#   geom_point() +
-#   geom_smooth(method = "glm", 
-#     method.args = list(family = "binomial"), 
-#     se = FALSE)
 
 phase_3_hiring_data %>%
     ggplot(aes(x = combined_rating, y = hired, color = gender)) +
@@ -505,7 +534,7 @@ knitr::kable(anova(phase_3_glm, phase_3_glmm, test = "Chisq"), align = c("r", "r
 
 Again, we performed a Drop-in-deviance test (Table 7) to compare the models and test for the significance of model coefficients and found that gender was the only covariate that yielded a p-value > 0.1 (p-value = 0.9999591). Thus there is no evidence against the null hypothesis that gender explains applicants being hired in the phase 3 hiring dataset.
 
-In conclusion, our Logistic mixed models showed that in all 3 phases of the hiring process, gender had little to no effect on whether or not an applicant moved forward from the first 2 phases and whether or not an applicant was hired in the phase 3. This is potentially good news on the topic of gender parity in Black Saber's hiring process as it suggests that in each step, the covariates other than gender are all statistically significant (p-value < 0.001) and explain most of whether or not an applicant moves forward or is hired.
+In conclusion, our Logistic mixed models showed that in all 3 phases of the hiring process, gender had little to no effect on whether or not an applicant moved forward from the first 2 phases and whether or not an applicant was hired in phase 3. This is potentially good news on the topic of gender parity in Black Saber's hiring process as it suggests that in each step, the covariates other than gender are all statistically significant (p-value < 0.001) and explain most of whether or not an applicant moves forward or is hired.
 
 ## Discussion
 
